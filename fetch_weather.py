@@ -4,6 +4,7 @@ import hmac
 import hashlib
 import json
 import urllib.request
+import urllib.error
 
 # Umgebungsvariablen aus GitHub Secrets laden
 API_KEY = os.environ.get("WL_API_KEY")
@@ -11,7 +12,7 @@ API_SECRET = os.environ.get("WL_API_SECRET")
 STATION_ID = "33008" # Die ID von LSZK
 
 if not API_KEY or not API_SECRET:
-    print("Fehler: API Key oder Secret fehlen.")
+    print("Fehler: API Key oder Secret fehlen. Bitte GitHub Secrets überprüfen.")
     exit(1)
 
 # Signatur generieren
@@ -23,6 +24,7 @@ signature = hmac.new(
     hashlib.sha256
 ).hexdigest()
 
+# Saubere URL zusammensetzen
 url = f"[https://api.weatherlink.com/v2/current/](https://api.weatherlink.com/v2/current/){STATION_ID}?api-key={API_KEY}&t={timestamp}&api-signature={signature}"
 
 # Daten abrufen und in Datei speichern
@@ -36,6 +38,10 @@ try:
             json.dump(data, f, indent=4)
             
     print("Wetterdaten erfolgreich aktualisiert und gespeichert.")
+except urllib.error.HTTPError as e:
+    print(f"HTTP Fehler {e.code} beim Abruf der WeatherLink API.")
+    print(f"Details: {e.read().decode()}")
+    exit(1)
 except Exception as e:
-    print(f"Fehler beim Abruf: {e}")
+    print(f"Allgemeiner Fehler beim Abruf: {e}")
     exit(1)
