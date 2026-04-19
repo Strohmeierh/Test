@@ -293,7 +293,7 @@
             errorContainer.classList.remove('hidden');
         }
 
-        // Hauptfunktion zum API-Abruf mit erweitertem Debugging
+        // Hauptfunktion zum API-Abruf mit erweitertem Debugging und Fallback-Proxys
         async function fetchWeatherData() {
             const apiKey = localStorage.getItem('wl_apikey');
             const apiSecret = localStorage.getItem('wl_apisecret');
@@ -305,55 +305,76 @@
             dashboard.classList.add('hidden');
             loading.classList.remove('hidden');
 
-            let proxyUrl = "";
             let apiUrl = "";
+            let weatherData = null;
+            let lastErrorMsg = "";
 
             try {
                 const timestamp = Math.floor(Date.now() / 1000);
                 const signature = await generateSignature(apiKey, apiSecret, stationId, timestamp);
-                
-                // Wir nutzen /get anstelle von /raw. Das liefert uns ein JSON-Objekt ZURÜCK,
-                // das den exakten HTTP-Statuscode von WeatherLink und deren Fehlermeldung enthält!
                 apiUrl = `https://api.weatherlink.com/v2/current/${stationId}?api-key=${apiKey}&t=${timestamp}&api-signature=${signature}`;
-                proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
                 
-                const response = await fetch(proxyUrl);
-                const proxyData = await response.json(); // Lese die Proxy-Antwort
+                // Fetch-Methoden in absteigender Reihenfolge der Zuverlässigkeit
+                const fetchMethods = [
+                    { name: "AllOrigins", url: `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}` },
+                    { name: "CorsProxy", url: `https://corsproxy.io/?${encodeURIComponent(apiUrl)}` },
+                    { name: "CodeTabs", url: `https://api.codetabs.com/v1/proxy/?quest=${apiUrl}` },
+                    { name: "Direct", url: apiUrl } // Direkter Aufruf als letzter Notnagel
+                ];
 
-                // Prüfe, ob der Proxy selbst einen Fehler hatte
-                if (!response.ok) {
-                    throw new Error(`Der Proxy-Server meldet einen Fehler: ${response.status}`);
+                for (const method of fetchMethods) {
+                    try {
+                        console.log(`Versuche Abruf über: ${method.name}`);
+                        const response = await fetch(method.url);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP Error ${response.status}`);
+                        }
+
+                        const text = await response.text();
+                        let data;
+                        try {
+                            data = JSON.parse(text);
+                        } catch (e) {
+                            throw new Error(`Kein gültiges JSON empfangen.`);
+                        }
+
+                        // WeatherLink API Fehlermeldung auslesen, falls vorhanden
+                        if (data && data.message && !data.sensors) {
+                            throw new Error(`WeatherLink API abgelehnt: ${data.message}`);
+                        }
+
+                        if (data && data.sensors) {
+                            weatherData = data;
+                            break; // Erfolgreich! Schleife abbrechen.
+                        } else {
+                            throw new Error("Daten empfangen, aber Struktur ungültig.");
+                        }
+
+                    } catch (err) {
+                        console.warn(`Fehler mit ${method.name}:`, err.message);
+                        lastErrorMsg = `${method.name}: ${err.message}`;
+                    }
                 }
 
-                // Extrahieren der echten WeatherLink-Antwort aus dem Proxy-Wrapper
-                if (proxyData.status && proxyData.status.http_code !== 200) {
-                    // WeatherLink hat nicht mit 200 OK geantwortet. Zeige genaue Details an.
-                    showError(
-                        `WeatherLink API Fehler: HTTP Status ${proxyData.status.http_code}`, 
-                        `Die API hat die Anfrage abgelehnt.\n\nAufgerufene URL:\n${apiUrl}\n\nAntwort vom Server:\n${proxyData.contents || 'Kein Text zurückgegeben'}`
-                    );
-                    return;
-                }
-
-                // Versuche die eigentlichen Daten von WeatherLink zu parsen
-                let weatherData;
-                try {
-                    weatherData = JSON.parse(proxyData.contents);
-                } catch (parseError) {
-                    showError(
-                        "Konnte Daten von WeatherLink nicht lesen.",
-                        `Erwartet wurde JSON, erhalten wurde:\n${proxyData.contents.substring(0, 300)}...`
-                    );
-                    return;
+                if (!weatherData) {
+                    throw new Error(lastErrorMsg);
                 }
 
                 updateDashboard(weatherData);
 
             } catch (err) {
                 console.error(err);
+                
+                // Spezielle und deutliche Warnung für den Fall, dass ALLE blockiert werden
+                let debugInfo = `Letzter Fehler: ${err.message}\nZiel-API: ${apiUrl}`;
+                if (err.message.includes('Failed to fetch')) {
+                    debugInfo += `\n\n⚠ ACHTUNG: "Failed to fetch" bedeutet, dass dein Browser die Verbindung aktiv blockiert.\nBitte deaktiviere temporär deinen Adblocker (z.B. uBlock Origin), VPN, oder den Tracking-Schutz (Brave Shields) für diese Seite, da diese oft Proxy-Dienste blockieren.`;
+                }
+
                 showError(
-                    "Ein unerwarteter Fehler ist aufgetreten (Netzwerk oder Code).", 
-                    `Fehler: ${err.message}\nProxy-URL: ${proxyUrl}\nAPI-URL: ${apiUrl}`
+                    "Alle Verbindungsversuche wurden vom Netzwerk/Browser blockiert.", 
+                    debugInfo
                 );
             }
         }
