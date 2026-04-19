@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LSZK Speck-Fehraltorf - Live Wetter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Sanfte Übergänge für UI-Elemente */
+        .transition-all { transition: all 0.3s ease; }
+        .wind-arrow { transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans selection:bg-blue-500 selection:text-white">
+
+    <div class="max-w-4xl mx-auto p-4 md:p-8">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8 border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold flex items-center gap-3 text-blue-400">
+                    <i data-lucide="plane"></i> LSZK Speck-Fehraltorf
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Live Wetterdaten via WeatherLink API</p>
+            </div>
+            <button id="btn-settings" class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-all" title="Einstellungen">
+                <i data-lucide="settings"></i>
+            </button>
+        </header>
+
+        <!-- Einstellungen (Konfiguration) -->
+        <div id="settings-panel" class="bg-slate-800 rounded-xl p-6 mb-8 shadow-xl border border-slate-700 transition-all hidden">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                <i data-lucide="key" class="w-5 h-5 text-yellow-500"></i> API Konfiguration
+            </h2>
+            <p class="text-sm text-slate-400 mb-4">
+                Gib hier deine WeatherLink v2 API-Daten ein. Diese werden nur lokal in deinem Browser gespeichert.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">API Key</label>
+                    <input type="text" id="input-key" value="uwav0rwoomoubqfj8216tz7bexkd4306" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">API Secret</label>
+                    <input type="password" id="input-secret" value="sgqu0rvtfftimctsji8jmiteh4ea6b65" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Station ID</label>
+                    <input type="text" id="input-station" value="33008" class="w-full bg-slate-900 border border-slate-600 rounded-lg p-2 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none" placeholder="z.B. 12345">
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button id="btn-save" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+                    <i data-lucide="save" class="w-4 h-4"></i> Speichern & Abrufen
+                </button>
+            </div>
+        </div>
+
+        <!-- Lade-Indikator -->
+        <div id="loading" class="hidden flex-col items-center justify-center py-12">
+            <i data-lucide="loader-2" class="w-10 h-10 text-blue-500 animate-spin mb-4"></i>
+            <p class="text-slate-400">Wetterdaten werden abgerufen...</p>
+        </div>
+
+        <!-- Fehlermeldung -->
+        <div id="error-message" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 rounded-xl p-4 mb-8 flex items-start gap-3">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-red-400 shrink-0"></i>
+            <div>
+                <h3 class="font-semibold">Fehler beim Abruf</h3>
+                <p id="error-text" class="text-sm mt-1"></p>
+            </div>
+        </div>
+
+        <!-- Dashboard (Wetterdaten) -->
+        <div id="dashboard" class="hidden">
+            
+            <div class="flex justify-between items-end mb-4">
+                <p class="text-slate-400 text-sm" id="time-updated">Zuletzt aktualisiert: --</p>
+                <button id="btn-refresh" class="text-blue-400 hover:text-blue-300 flex items-center gap-1 text-sm transition-all">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Aktualisieren
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- Temperatur -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg relative overflow-hidden">
+                    <div class="absolute top-0 right-0 p-4 opacity-10">
+                        <i data-lucide="thermometer" class="w-24 h-24"></i>
+                    </div>
+                    <h3 class="text-slate-400 text-sm font-medium mb-1">Temperatur</h3>
+                    <div class="flex items-baseline gap-2">
+                        <span id="val-temp" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-xl text-slate-300">°C</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">Taupunkt: <span id="val-dewpoint">--</span> °C</p>
+                </div>
+
+                <!-- Wind -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg col-span-1 md:col-span-2 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+                            <i data-lucide="wind" class="w-4 h-4"></i> Wind
+                        </h3>
+                        <div class="flex items-baseline gap-2">
+                            <span id="val-wind-speed" class="text-4xl font-bold text-white">--</span>
+                            <span class="text-xl text-slate-300">kt</span>
+                        </div>
+                        <p class="text-sm text-slate-500 mt-2">Böen (10 Min): <span id="val-wind-gust" class="text-white font-medium">--</span> kt</p>
+                        <p class="text-sm text-slate-500">Richtung: <span id="val-wind-dir-text" class="text-white font-medium">--</span></p>
+                    </div>
+                    
+                    <!-- Windkompass -->
+                    <div class="w-24 h-24 rounded-full border-4 border-slate-700 relative flex items-center justify-center bg-slate-900/50">
+                        <div class="absolute top-0 text-[10px] text-slate-500 font-bold -mt-1">N</div>
+                        <div class="absolute right-0 text-[10px] text-slate-500 font-bold -mr-1">E</div>
+                        <div class="absolute bottom-0 text-[10px] text-slate-500 font-bold -mb-1">S</div>
+                        <div class="absolute left-0 text-[10px] text-slate-500 font-bold -ml-1">W</div>
+                        <div id="val-wind-dir-arrow" class="wind-arrow text-blue-500 drop-shadow-md" style="transform: rotate(0deg);">
+                            <i data-lucide="navigation" class="w-8 h-8 fill-blue-500"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QNH (Luftdruck) -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+                        <i data-lucide="gauge" class="w-4 h-4"></i> QNH (Druck)
+                    </h3>
+                    <div class="flex items-baseline gap-2 mt-2">
+                        <span id="val-pressure" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-xl text-slate-300">hPa</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">Tendenz: <span id="val-pressure-trend">--</span></p>
+                </div>
+
+                <!-- Feuchtigkeit -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+                        <i data-lucide="droplets" class="w-4 h-4"></i> Luftfeuchtigkeit
+                    </h3>
+                    <div class="flex items-baseline gap-2 mt-2">
+                        <span id="val-humidity" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-xl text-slate-300">%</span>
+                    </div>
+                </div>
+
+                <!-- Regen heute -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg">
+                    <h3 class="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+                        <i data-lucide="cloud-rain" class="w-4 h-4"></i> Niederschlag (Heute)
+                    </h3>
+                    <div class="flex items-baseline gap-2 mt-2">
+                        <span id="val-rain" class="text-4xl font-bold text-white">--</span>
+                        <span class="text-xl text-slate-300">mm</span>
+                    </div>
+                    <p class="text-sm text-slate-500 mt-2">Rate: <span id="val-rain-rate">--</span> mm/h</p>
+                </div>
+
+                <!-- Solar / UV (Falls vorhanden) -->
+                <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg col-span-1 md:col-span-2 flex items-center justify-between">
+                     <div>
+                        <h3 class="text-slate-400 text-sm font-medium mb-1 flex items-center gap-2">
+                            <i data-lucide="sun" class="w-4 h-4"></i> Solarstrahlung & UV
+                        </h3>
+                        <div class="flex items-baseline gap-4 mt-2">
+                            <div>
+                                <span id="val-solar" class="text-2xl font-bold text-white">--</span>
+                                <span class="text-sm text-slate-300">W/m²</span>
+                            </div>
+                            <div class="border-l border-slate-600 pl-4">
+                                <span id="val-uv" class="text-2xl font-bold text-white">--</span>
+                                <span class="text-sm text-slate-300">UV-Index</span>
+                            </div>
+                        </div>
+                     </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Initialisiere Lucide Icons
+        lucide.createIcons();
+
+        // UI Elemente
+        const panelSettings = document.getElementById('settings-panel');
+        const dashboard = document.getElementById('dashboard');
+        const loading = document.getElementById('loading');
+        const errorContainer = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        
+        // Buttons
+        document.getElementById('btn-settings').addEventListener('click', () => {
+            panelSettings.classList.toggle('hidden');
+        });
+        document.getElementById('btn-save').addEventListener('click', saveAndFetch);
+        document.getElementById('btn-refresh').addEventListener('click', fetchWeatherData);
+
+        // Umrechnungs-Funktionen (WeatherLink liefert US-Einheiten)
+        const fToC = (f) => f != null ? ((f - 32) * 5/9).toFixed(1) : '--';
+        const mphToKt = (mph) => mph != null ? (mph * 0.868976).toFixed(1) : '--';
+        const inHgToHpa = (inhg) => inhg != null ? (inhg * 33.8639).toFixed(1) : '--';
+        const inchesToMm = (inches) => inches != null ? (inches * 25.4).toFixed(1) : '--';
+        
+        // Hilfsfunktion: Himmelsrichtung aus Grad
+        const getWindDirText = (deg) => {
+            if (deg == null) return '--';
+            const dirs = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+            return `${dirs[Math.round(deg / 22.5) % 16]} (${deg}°)`;
+        };
+
+        // HMAC-SHA256 Signatur Generator (Nativ im Browser)
+        async function generateSignature(apiKey, apiSecret, stationId, timestamp) {
+            const message = `api-key=${apiKey}&station-id=${stationId}&t=${timestamp}`;
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(apiSecret);
+            const msgData = encoder.encode(message);
+
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+            );
+            
+            const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+            
+            // Konvertiere ArrayBuffer zu Hex-String
+            return Array.from(new Uint8Array(signature))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        }
+
+        // Setup & Laden beim Start
+        function loadConfig() {
+            // Standardwerte vorbelegen, falls noch nichts gespeichert wurde
+            if (!localStorage.getItem('wl_apikey')) {
+                localStorage.setItem('wl_apikey', 'uwav0rwoomoubqfj8216tz7bexkd4306');
+            }
+            if (!localStorage.getItem('wl_apisecret')) {
+                localStorage.setItem('wl_apisecret', 'sgqu0rvtfftimctsji8jmiteh4ea6b65');
+            }
+            if (!localStorage.getItem('wl_station')) {
+                localStorage.setItem('wl_station', '33008');
+            }
+
+            const key = localStorage.getItem('wl_apikey');
+            const secret = localStorage.getItem('wl_apisecret');
+            const station = localStorage.getItem('wl_station');
+
+            if (key && secret && station) {
+                document.getElementById('input-key').value = key;
+                document.getElementById('input-secret').value = secret;
+                document.getElementById('input-station').value = station;
+                fetchWeatherData();
+            } else {
+                panelSettings.classList.remove('hidden');
+            }
+        }
+
+        function saveAndFetch() {
+            const key = document.getElementById('input-key').value.trim();
+            const secret = document.getElementById('input-secret').value.trim();
+            const station = document.getElementById('input-station').value.trim();
+
+            if (!key || !secret || !station) {
+                showError("Bitte fülle alle drei Felder aus.");
+                return;
+            }
+
+            localStorage.setItem('wl_apikey', key);
+            localStorage.setItem('wl_apisecret', secret);
+            localStorage.setItem('wl_station', station);
+
+            panelSettings.classList.add('hidden');
+            fetchWeatherData();
+        }
+
+        function showError(msg) {
+            loading.classList.add('hidden');
+            dashboard.classList.add('hidden');
+            errorText.textContent = msg;
+            errorContainer.classList.remove('hidden');
+        }
+
+        // Hauptfunktion zum API-Abruf
+        async function fetchWeatherData() {
+            const apiKey = localStorage.getItem('wl_apikey');
+            const apiSecret = localStorage.getItem('wl_apisecret');
+            const stationId = localStorage.getItem('wl_station');
+
+            if (!apiKey || !apiSecret || !stationId) return;
+
+            errorContainer.classList.add('hidden');
+            dashboard.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            try {
+                const timestamp = Math.floor(Date.now() / 1000);
+                const signature = await generateSignature(apiKey, apiSecret, stationId, timestamp);
+                
+                // WeatherLink blockiert direkte Browser-Aufrufe (CORS). 
+                // Wir nutzen einen alternativen Proxy-Service (allorigins.win), der in iframe-Umgebungen zuverlässiger ist.
+                const apiUrl = `https://api.weatherlink.com/v2/current/${stationId}?api-key=${apiKey}&t=${timestamp}&api-signature=${signature}`;
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`;
+                
+                const response = await fetch(proxyUrl);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.message || `API Fehler: ${response.status}`);
+                }
+
+                updateDashboard(data);
+
+            } catch (err) {
+                console.error(err);
+                showError(err.message || "Netzwerk/CORS Fehler beim Verbinden mit der WeatherLink API. Der Proxy wurde möglicherweise blockiert.");
+            }
+        }
+
+        // UI mit Daten füllen
+        function updateDashboard(data) {
+            // Finde den relevanten Datensatz (Sensor mit Außentemperatur)
+            let current = null;
+            if (data && data.sensors) {
+                for (let sensor of data.sensors) {
+                    if (sensor.data && sensor.data.length > 0) {
+                        // Wir suchen den Sensor, der temp_out hat
+                        if (sensor.data[0].temp_out !== undefined) {
+                            current = sensor.data[0];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!current) {
+                showError("Keine Wetterdaten in der API-Antwort gefunden.");
+                return;
+            }
+
+            // Temperatur & Feuchte
+            document.getElementById('val-temp').textContent = fToC(current.temp_out);
+            document.getElementById('val-dewpoint').textContent = fToC(current.dew_point);
+            document.getElementById('val-humidity').textContent = current.hum_out != null ? Math.round(current.hum_out) : '--';
+
+            // Wind (Knoten in der Luftfahrt)
+            document.getElementById('val-wind-speed').textContent = mphToKt(current.wind_speed);
+            document.getElementById('val-wind-gust').textContent = mphToKt(current.wind_gust_10_min);
+            
+            // Windrichtung
+            const windDir = current.wind_dir;
+            document.getElementById('val-wind-dir-text').textContent = getWindDirText(windDir);
+            const windArrow = document.getElementById('val-wind-dir-arrow');
+            if (windDir != null) {
+                windArrow.style.transform = `rotate(${windDir}deg)`;
+            }
+
+            // Luftdruck (QNH)
+            document.getElementById('val-pressure').textContent = inHgToHpa(current.bar_sea_level);
+            
+            // Druck-Tendenz interpretieren
+            let trendText = "--";
+            if (current.bar_trend != null) {
+                if (current.bar_trend > 20) trendText = "Stark steigend ↗";
+                else if (current.bar_trend > 0) trendText = "Steigend ↗";
+                else if (current.bar_trend < -20) trendText = "Stark fallend ↘";
+                else if (current.bar_trend < 0) trendText = "Fallend ↘";
+                else trendText = "Gleichbleibend →";
+            }
+            document.getElementById('val-pressure-trend').textContent = trendText;
+
+            // Regen
+            document.getElementById('val-rain').textContent = inchesToMm(current.rainfall_daily);
+            document.getElementById('val-rain-rate').textContent = inchesToMm(current.rain_rate_last_mm);
+
+            // Solar / UV (Optional)
+            document.getElementById('val-solar').textContent = current.solar_rad != null ? current.solar_rad : '--';
+            document.getElementById('val-uv').textContent = current.uv_index != null ? current.uv_index : '--';
+
+            // Aktualisierungs-Zeitstempel
+            const date = new Date(current.ts * 1000);
+            document.getElementById('time-updated').textContent = `Zuletzt aktualisiert: ${date.toLocaleTimeString('de-CH')} Uhr`;
+
+            // Ansicht wechseln
+            loading.classList.add('hidden');
+            dashboard.classList.remove('hidden');
+        }
+
+        // Start
+        loadConfig();
+
+    </script>
+</body>
+</html>
