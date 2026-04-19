@@ -1,47 +1,82 @@
-import os
-import time
-import hmac
-import hashlib
+#!/usr/bin/env python3
+"""
+Fetch LSZK weather data from the public WeatherLink embed endpoints and write:
+  - data/lszk_latest.json    (single pretty-printed snapshot, overwritten)
+  - data/lszk_history.jsonl  (one compact JSON per line, appended)
+
+The embed endpoints (used by weatherlink.com's /embeddablePage widget) do not
+require API-Key / Secret — just the device URL-token from the embed URL.
+
+Required environment variables:
+    WEATHERLINK_DEVICE_TOKEN   e.g. 411b7945460c42848a14d053bb7c03c0
+
+Optional:
+    WEATHERLINK_OUT_DIR        default: "data"
+
+Note: these endpoints are *internal* to weatherlink.com (not part of the
+documented v2 API). They are stable enough for hobby logging but could change
+without notice.
+"""
 import json
-import urllib.request
+import os
+import sys
 import urllib.error
+import urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
 
-# Umgebungsvariablen aus GitHub Secrets laden
-API_KEY = os.environ.get("WL_API_KEY")
-API_SECRET = os.environ.get("WL_API_SECRET")
-STATION_ID = "33008" # Die ID von LSZK
+BASE = "https://www.weatherlink.com/embeddablePage"
+TOKEN = os.environ.get("WEATHERLINK_DEVICE_TOKEN")
+OUT_DIR = Path(os.environ.get("WEATHERLINK_OUT_DIR", "data"))
 
-if not API_KEY or not API_SECRET:
-    print("Fehler: API Key oder Secret fehlen. Bitte GitHub Secrets überprüfen.")
-    exit(1)
+if not TOKEN:
+    sys.exit("ERROR: Set WEATHERLINK_DEVICE_TOKEN (from the embed URL).")
 
-# Signatur generieren
-timestamp = int(time.time())
-msg = f"api-key={API_KEY}&station-id={STATION_ID}&t={timestamp}"
-signature = hmac.new(
-    API_SECRET.encode('utf-8'), 
-    msg.encode('utf-8'), 
-    hashlib.sha256
-).hexdigest()
 
-# Saubere URL zusammensetzen
-url = f"[https://api.weatherlink.com/v2/current/](https://api.weatherlink.com/v2/current/){STATION_ID}?api-key={API_KEY}&t={timestamp}&api-signature={signature}"
+def get_json(url: str) -> dict:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "lszk-weather-logger/1.0 (+github-actions)",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        sys.exit(f"HTTP {e.code} for {url}: {e.read().decode(errors='replace')}")
 
-# Daten abrufen und in Datei speichern
-try:
-    req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
-        data = json.loads(response.read().decode())
-        
-        # In eine JSON Datei speichern
-        with open('lszk_weather.json', 'w') as f:
-            json.dump(data, f, indent=4)
-            
-    print("Wetterdaten erfolgreich aktualisiert und gespeichert.")
-except urllib.error.HTTPError as e:
-    print(f"HTTP Fehler {e.code} beim Abruf der WeatherLink API.")
-    print(f"Details: {e.read().decode()}")
-    exit(1)
-except Exception as e:
-    print(f"Allgemeiner Fehler beim Abruf: {e}")
-    exit(1)
+
+current = get_json(f"{BASE}/getData/{TOKEN}")
+summary = get_json(f"{BASE}/summaryData/{TOKEN}")
+
+last_received_ms = current.get("lastReceived")
+last_received_iso = (
+    datetime.fromtimestamp(last_received_ms / 1000, tz=timezone.utc).isoformat()
+    if isinstance(last_received_ms, (int, float))
+    else None
+)
+
+record = {
+    "fetched_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    "station_last_received_utc": last_received_iso,
+    "device_token": TOKEN,
+    "current": current,
+    "summary": summary,
+}
+
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+(OUT_DIR / "lszk_latest.json").write_text(
+    json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8"
+)
+with (OUT_DIR / "lszk_history.jsonl").open("a", encoding="utf-8") as f:
+    f.write(json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n")
+
+temp = current.get("temperature")
+wind = current.get("wind")
+gust = current.get("gust")
+print(
+    f"OK — LSZK @ {last_received_iso}: T={temp}°C, wind={wind} gust={gust} "
+    f"(station last update)"
+)
