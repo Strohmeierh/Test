@@ -64,12 +64,15 @@
             <p class="text-slate-400">Wetterdaten werden abgerufen...</p>
         </div>
 
-        <!-- Fehlermeldung -->
-        <div id="error-message" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 rounded-xl p-4 mb-8 flex items-start gap-3">
-            <i data-lucide="alert-triangle" class="w-6 h-6 text-red-400 shrink-0"></i>
-            <div>
-                <h3 class="font-semibold">Fehler beim Abruf</h3>
-                <p id="error-text" class="text-sm mt-1"></p>
+        <!-- Fehlermeldung (Erweitert für Debugging) -->
+        <div id="error-message" class="hidden bg-red-900/50 border border-red-500/50 text-red-200 rounded-xl p-4 mb-8 flex items-start gap-3 w-full">
+            <i data-lucide="alert-triangle" class="w-6 h-6 text-red-400 shrink-0 mt-1"></i>
+            <div class="w-full overflow-hidden">
+                <h3 class="font-semibold text-lg">Fehler bei der API-Anfrage</h3>
+                <p id="error-text" class="text-sm mt-1 mb-2 font-medium"></p>
+                <div class="bg-red-950 p-3 rounded border border-red-800/50 overflow-x-auto">
+                    <p class="text-xs text-red-300 font-mono whitespace-pre-wrap break-all" id="error-details">Keine weiteren Details verfügbar.</p>
+                </div>
             </div>
         </div>
 
@@ -193,6 +196,7 @@
         const loading = document.getElementById('loading');
         const errorContainer = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
+        const errorDetails = document.getElementById('error-details');
         
         // Buttons
         document.getElementById('btn-settings').addEventListener('click', () => {
@@ -201,20 +205,19 @@
         document.getElementById('btn-save').addEventListener('click', saveAndFetch);
         document.getElementById('btn-refresh').addEventListener('click', fetchWeatherData);
 
-        // Umrechnungs-Funktionen (WeatherLink liefert US-Einheiten)
+        // Umrechnungs-Funktionen
         const fToC = (f) => f != null ? ((f - 32) * 5/9).toFixed(1) : '--';
         const mphToKt = (mph) => mph != null ? (mph * 0.868976).toFixed(1) : '--';
         const inHgToHpa = (inhg) => inhg != null ? (inhg * 33.8639).toFixed(1) : '--';
         const inchesToMm = (inches) => inches != null ? (inches * 25.4).toFixed(1) : '--';
         
-        // Hilfsfunktion: Himmelsrichtung aus Grad
         const getWindDirText = (deg) => {
             if (deg == null) return '--';
             const dirs = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
             return `${dirs[Math.round(deg / 22.5) % 16]} (${deg}°)`;
         };
 
-        // HMAC-SHA256 Signatur Generator (Nativ im Browser)
+        // HMAC-SHA256 Signatur Generator
         async function generateSignature(apiKey, apiSecret, stationId, timestamp) {
             const message = `api-key=${apiKey}&station-id=${stationId}&t=${timestamp}`;
             const encoder = new TextEncoder();
@@ -227,15 +230,12 @@
             
             const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
             
-            // Konvertiere ArrayBuffer zu Hex-String
             return Array.from(new Uint8Array(signature))
                 .map(b => b.toString(16).padStart(2, '0'))
                 .join('');
         }
 
-        // Setup & Laden beim Start
         function loadConfig() {
-            // Standardwerte vorbelegen, falls noch nichts gespeichert wurde
             if (!localStorage.getItem('wl_apikey')) {
                 localStorage.setItem('wl_apikey', 'uwav0rwoomoubqfj8216tz7bexkd4306');
             }
@@ -278,14 +278,22 @@
             fetchWeatherData();
         }
 
-        function showError(msg) {
+        function showError(msg, details = "") {
             loading.classList.add('hidden');
             dashboard.classList.add('hidden');
             errorText.textContent = msg;
+            
+            if (details) {
+                errorDetails.textContent = details;
+                errorDetails.parentElement.classList.remove('hidden');
+            } else {
+                errorDetails.parentElement.classList.add('hidden');
+            }
+            
             errorContainer.classList.remove('hidden');
         }
 
-        // Hauptfunktion zum API-Abruf
+        // Hauptfunktion zum API-Abruf mit erweitertem Debugging
         async function fetchWeatherData() {
             const apiKey = localStorage.getItem('wl_apikey');
             const apiSecret = localStorage.getItem('wl_apisecret');
@@ -297,38 +305,65 @@
             dashboard.classList.add('hidden');
             loading.classList.remove('hidden');
 
+            let proxyUrl = "";
+            let apiUrl = "";
+
             try {
                 const timestamp = Math.floor(Date.now() / 1000);
                 const signature = await generateSignature(apiKey, apiSecret, stationId, timestamp);
                 
-                // WeatherLink blockiert direkte Browser-Aufrufe (CORS). 
-                // Wir nutzen einen alternativen Proxy-Service (allorigins.win), der in iframe-Umgebungen zuverlässiger ist.
-                const apiUrl = `https://api.weatherlink.com/v2/current/${stationId}?api-key=${apiKey}&t=${timestamp}&api-signature=${signature}`;
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(apiUrl)}`;
+                // Wir nutzen /get anstelle von /raw. Das liefert uns ein JSON-Objekt ZURÜCK,
+                // das den exakten HTTP-Statuscode von WeatherLink und deren Fehlermeldung enthält!
+                apiUrl = `https://api.weatherlink.com/v2/current/${stationId}?api-key=${apiKey}&t=${timestamp}&api-signature=${signature}`;
+                proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(apiUrl)}`;
                 
                 const response = await fetch(proxyUrl);
-                const data = await response.json();
+                const proxyData = await response.json(); // Lese die Proxy-Antwort
 
+                // Prüfe, ob der Proxy selbst einen Fehler hatte
                 if (!response.ok) {
-                    throw new Error(data.message || `API Fehler: ${response.status}`);
+                    throw new Error(`Der Proxy-Server meldet einen Fehler: ${response.status}`);
                 }
 
-                updateDashboard(data);
+                // Extrahieren der echten WeatherLink-Antwort aus dem Proxy-Wrapper
+                if (proxyData.status && proxyData.status.http_code !== 200) {
+                    // WeatherLink hat nicht mit 200 OK geantwortet. Zeige genaue Details an.
+                    showError(
+                        `WeatherLink API Fehler: HTTP Status ${proxyData.status.http_code}`, 
+                        `Die API hat die Anfrage abgelehnt.\n\nAufgerufene URL:\n${apiUrl}\n\nAntwort vom Server:\n${proxyData.contents || 'Kein Text zurückgegeben'}`
+                    );
+                    return;
+                }
+
+                // Versuche die eigentlichen Daten von WeatherLink zu parsen
+                let weatherData;
+                try {
+                    weatherData = JSON.parse(proxyData.contents);
+                } catch (parseError) {
+                    showError(
+                        "Konnte Daten von WeatherLink nicht lesen.",
+                        `Erwartet wurde JSON, erhalten wurde:\n${proxyData.contents.substring(0, 300)}...`
+                    );
+                    return;
+                }
+
+                updateDashboard(weatherData);
 
             } catch (err) {
                 console.error(err);
-                showError(err.message || "Netzwerk/CORS Fehler beim Verbinden mit der WeatherLink API. Der Proxy wurde möglicherweise blockiert.");
+                showError(
+                    "Ein unerwarteter Fehler ist aufgetreten (Netzwerk oder Code).", 
+                    `Fehler: ${err.message}\nProxy-URL: ${proxyUrl}\nAPI-URL: ${apiUrl}`
+                );
             }
         }
 
         // UI mit Daten füllen
         function updateDashboard(data) {
-            // Finde den relevanten Datensatz (Sensor mit Außentemperatur)
             let current = null;
             if (data && data.sensors) {
                 for (let sensor of data.sensors) {
                     if (sensor.data && sensor.data.length > 0) {
-                        // Wir suchen den Sensor, der temp_out hat
                         if (sensor.data[0].temp_out !== undefined) {
                             current = sensor.data[0];
                             break;
@@ -338,7 +373,10 @@
             }
 
             if (!current) {
-                showError("Keine Wetterdaten in der API-Antwort gefunden.");
+                showError(
+                    "API erfolgreich aufgerufen, aber keine Sensordaten gefunden.", 
+                    `JSON Struktur der Antwort:\n${JSON.stringify(data, null, 2)}`
+                );
                 return;
             }
 
@@ -362,7 +400,7 @@
             // Luftdruck (QNH)
             document.getElementById('val-pressure').textContent = inHgToHpa(current.bar_sea_level);
             
-            // Druck-Tendenz interpretieren
+            // Druck-Tendenz
             let trendText = "--";
             if (current.bar_trend != null) {
                 if (current.bar_trend > 20) trendText = "Stark steigend ↗";
@@ -377,11 +415,11 @@
             document.getElementById('val-rain').textContent = inchesToMm(current.rainfall_daily);
             document.getElementById('val-rain-rate').textContent = inchesToMm(current.rain_rate_last_mm);
 
-            // Solar / UV (Optional)
+            // Solar / UV
             document.getElementById('val-solar').textContent = current.solar_rad != null ? current.solar_rad : '--';
             document.getElementById('val-uv').textContent = current.uv_index != null ? current.uv_index : '--';
 
-            // Aktualisierungs-Zeitstempel
+            // Zeitstempel
             const date = new Date(current.ts * 1000);
             document.getElementById('time-updated').textContent = `Zuletzt aktualisiert: ${date.toLocaleTimeString('de-CH')} Uhr`;
 
