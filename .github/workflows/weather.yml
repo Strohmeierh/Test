@@ -28,7 +28,7 @@ jobs:
       - name: Fetch weather data
         env:
           WEATHERLINK_DEVICE_TOKEN: ${{ vars.WEATHERLINK_DEVICE_TOKEN }}
-        run: python scripts/fetch_weather.py
+        run: python fetch_weather.py
 
       - name: Commit & push if changed
         run: |
