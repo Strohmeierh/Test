@@ -1,9 +1,9 @@
 {
-  "fetched_at_utc": "2026-05-05T19:25:52+00:00",
-  "station_last_received_utc": "2026-05-05T19:24:56+00:00",
+  "fetched_at_utc": "2026-05-05T20:41:44+00:00",
+  "station_last_received_utc": "2026-05-05T20:40:59+00:00",
   "device_token": "411b7945460c42848a14d053bb7c03c0",
   "current": {
-    "windDirection": 161,
+    "windDirection": 186,
     "forecastOverview": [
       {
         "date": "2026-05-05",
@@ -12,7 +12,7 @@
           "weatherDesc": "",
           "weatherIconUrl": "https://s3.amazonaws.com/static.weatherlink.com/images/forecast/LightRain.png",
           "temp": -12,
-          "chanceofrain": 24,
+          "chanceofrain": 35,
           "rainInInches": 0.0
         },
         "afternoon": {
@@ -20,7 +20,7 @@
           "weatherDesc": "",
           "weatherIconUrl": "https://s3.amazonaws.com/static.weatherlink.com/images/forecast/LightRain.png",
           "temp": -12,
-          "chanceofrain": 24,
+          "chanceofrain": 35,
           "rainInInches": 0.0
         },
         "evening": {
@@ -28,7 +28,7 @@
           "weatherDesc": "Drizzle",
           "weatherIconUrl": "https://s3.amazonaws.com/static.weatherlink.com/images/forecast/LightRain.png",
           "temp": 11,
-          "chanceofrain": 21,
+          "chanceofrain": 35,
           "rainInInches": 0.0
         },
         "night": {
@@ -36,7 +36,7 @@
           "weatherDesc": "Drizzle",
           "weatherIconUrl": "https://s3.amazonaws.com/static.weatherlink.com/images/forecast/LightRain.png",
           "temp": 9,
-          "chanceofrain": 35,
+          "chanceofrain": 28,
           "rainInInches": 0.0
         }
       }
@@ -52,18 +52,18 @@
     "temperatureFeelLike": "12",
     "temperature": "12",
     "hiTemp": "19",
-    "hiTempDate": 1777992171783,
+    "hiTempDate": 1777992164193,
     "loTemp": "6",
-    "loTempDate": 1777952511783,
+    "loTempDate": 1777952504193,
     "wind": "0",
     "gust": "15",
-    "gustAt": 1777997391783,
-    "humidity": "86",
+    "gustAt": 1777997384193,
+    "humidity": "83",
     "rain": "0.2",
     "seasonalRain": "172.0",
-    "barometer": "1007.2",
+    "barometer": "1007.5",
     "barometerTrend": "Rising Slowly",
-    "lastReceived": 1778009096000,
+    "lastReceived": 1778013659000,
     "systemLocation": "Fehraltorf, ZH, CHE",
     "aqsLocation": null,
     "aqsLastReceived": null,
@@ -76,7 +76,7 @@
   },
   "summary": {
     "ownerName": null,
-    "lastReceived": 1778009096000,
+    "lastReceived": 1778013659000,
     "currConditionValues": [
       {
         "sensorDataTypeId": 7,
@@ -95,9 +95,9 @@
         "sensorDataTypeId": 14,
         "sensorDataName": "Hum",
         "displayName": "Hum",
-        "reportedValue": 86,
-        "value": 86,
-        "convertedValue": "86",
+        "reportedValue": 83,
+        "value": 83,
+        "convertedValue": "83",
         "depthLabel": null,
         "category": "main",
         "assocSensorDataTypeId": null,
@@ -147,9 +147,9 @@
         "sensorDataTypeId": 17,
         "sensorDataName": "Wind Direction",
         "displayName": "Wind Direction",
-        "reportedValue": 161,
-        "value": 161,
-        "convertedValue": "161",
+        "reportedValue": 186,
+        "value": 186,
+        "convertedValue": "186",
         "depthLabel": null,
         "category": "main",
         "assocSensorDataTypeId": null,
@@ -225,9 +225,9 @@
         "sensorDataTypeId": 26,
         "sensorDataName": "Barometer",
         "displayName": "Barometer",
-        "reportedValue": 1007.2,
-        "value": 1007.2,
-        "convertedValue": "1007.2",
+        "reportedValue": 1007.5,
+        "value": 1007.5,
+        "convertedValue": "1007.5",
         "depthLabel": null,
         "category": "main",
         "assocSensorDataTypeId": null,
@@ -290,9 +290,9 @@
         "sensorDataTypeId": 71,
         "sensorDataName": "Wet Bulb",
         "displayName": "Wet Bulb",
-        "reportedValue": 11,
-        "value": 11,
-        "convertedValue": "11",
+        "reportedValue": 10,
+        "value": 10,
+        "convertedValue": "10",
         "depthLabel": null,
         "category": "main",
         "assocSensorDataTypeId": null,
